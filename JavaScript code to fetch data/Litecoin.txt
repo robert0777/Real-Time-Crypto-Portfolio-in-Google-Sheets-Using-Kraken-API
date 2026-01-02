@@ -1,0 +1,68 @@
+// For more details please read my article on Medium: https://chomchom216.medium.com/
+// Thank you. Dr. Robert Hernández Martínez
+// robert@actuariayfinanzas.net
+// Badges: https://www.credly.com/users/robert-hernandez.89bffe7b/badges#credly
+
+
+function importKrakenData() {
+  var spreadsheet = SpreadsheetApp.getActiveSpreadsheet();
+  var sheetName = "LTC/USD";
+  var sheet = spreadsheet.getSheetByName(sheetName);
+  
+  // Create the sheet if it doesn't exist
+  if (!sheet) {
+    sheet = spreadsheet.insertSheet(sheetName);
+  }
+  
+  // Set the new sheet as the active sheet
+  spreadsheet.setActiveSheet(sheet);
+  
+  // Clear any existing content in the sheet
+  sheet.clear();
+  
+  // Kraken API for Litecoin OHLC data (USD, 1-day interval)
+  var url = "https://api.kraken.com/0/public/OHLC?pair=LTCUSD&interval=1440";
+  
+  try {
+    Utilities.sleep(2000); // Delay to prevent rate limiting
+
+    var response = UrlFetchApp.fetch(url, { muteHttpExceptions: true });
+
+    if (response.getResponseCode() !== 200) {
+      Logger.log("Response Code: " + response.getResponseCode());
+      Logger.log("Response: " + response.getContentText());
+      throw new Error("Failed to fetch data from Kraken API");
+    }
+
+    var json = JSON.parse(response.getContentText());
+
+    // Extract OHLC data
+    var data = json.result.XLTCZUSD; // LTC/USD pair on Kraken
+
+    // Prepare headers
+    var headers = [["Timestamp", "Open", "High", "Low", "Close"]];
+    sheet.getRange(1, 1, 1, 5).setValues(headers);
+
+    // Format data
+    var formattedData = data.map(function(row) {
+      return [
+        new Date(row[0] * 1000), // Convert Unix timestamp to date
+        parseFloat(row[1]), // Open
+        parseFloat(row[2]), // High
+        parseFloat(row[3]), // Low
+        parseFloat(row[4])  // Close
+      ];
+    });
+
+    // Write data to sheet
+    if (formattedData.length > 0) {
+      sheet.getRange(2, 1, formattedData.length, 5).setValues(formattedData);
+      sheet.getRange(2, 1, formattedData.length, 1).setNumberFormat("yyyy-mm-dd hh:mm:ss");
+      sheet.getRange(2, 2, formattedData.length, 4).setNumberFormat("$#,##0.000000");
+    }
+
+  } catch (error) {
+    Logger.log("Error: " + error.toString());
+    throw new Error("Failed to import data from Kraken API");
+  }
+}
