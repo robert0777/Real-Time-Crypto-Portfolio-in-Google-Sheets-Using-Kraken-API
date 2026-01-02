@@ -1,0 +1,34 @@
+// For more details please read my article on Medium: https://chomchom216.medium.com/
+// Thank you. Dr. Robert Hernández Martínez
+// robert@actuariayfinanzas.net
+// Badges: https://www.credly.com/users/robert-hernandez.89bffe7b/badges#credly
+
+
+function onOpen() {
+  var ui = SpreadsheetApp.getUi();
+  
+ 
+  
+  // Create Kraken Crypto Data menu
+  ui.createMenu('Kraken Crypto Data')
+    .addItem('Import All Cryptocurrencies', 'importAllKrakenData')
+    .addSeparator()
+    .addItem('Import Bitcoin (BTC)', 'importBitcoinData')
+    .addItem('Import Ethereum (ETH)', 'importEthereumData') 
+    .addItem('Import Ripple (XRP)', 'importRippleData')
+    .addItem('Import Dogecoin (DOGE)', 'importDogeData')
+    .addItem('Import Cardano (ADA)', 'importCardanoData')
+
+    .addItem('Import Litecoin (LTC)', 'importLitecoinData')
+    .addItem('Import Shiba Inu (SHIB)', 'importShibaInuData')
+
+    .addItem('Import Tether (USDT)', 'importTetherData')
+    .addItem('Import Binance USD (BNB)', 'importBinanceUSDData')
+    .addItem('Import Dai (DAI)', 'importDaiData')
+
+    .addItem('Import PayPal (PYUSD)', 'importPayPalData')
+    .addItem('Import True USD (TUSD)', 'importTrueUSDData')
+
+
+    .addToUi();
+}
