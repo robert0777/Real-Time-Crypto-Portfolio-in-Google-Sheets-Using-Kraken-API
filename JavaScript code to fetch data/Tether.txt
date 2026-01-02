@@ -1,0 +1,153 @@
+// For more details please read my article on Medium: https://chomchom216.medium.com/
+// Thank you. Dr. Robert Hernández Martínez
+// robert@actuariayfinanzas.net
+// Badges: https://www.credly.com/users/robert-hernandez.89bffe7b/badges#credly
+
+
+function importKrakenData() {
+  var spreadsheet = SpreadsheetApp.getActiveSpreadsheet();
+  var sheetName = "USDT/USD";
+  var sheet = spreadsheet.getSheetByName(sheetName);
+  
+  // Create the sheet if it doesn't exist
+  if (!sheet) {
+    sheet = spreadsheet.insertSheet(sheetName);
+  }
+  
+  // Set the new sheet as the active sheet
+  spreadsheet.setActiveSheet(sheet);
+  
+  // Clear any existing content in the sheet
+  sheet.clear();
+  
+  // Kraken API for Tether OHLC data (USD, 1-day interval)
+  var url = "https://api.kraken.com/0/public/OHLC?pair=USDTZUSD&interval=1440";
+  
+  try {
+    Utilities.sleep(2000); // Delay to prevent rate limiting
+
+    var response = UrlFetchApp.fetch(url, { muteHttpExceptions: true });
+
+    if (response.getResponseCode() !== 200) {
+      Logger.log("Response Code: " + response.getResponseCode());
+      Logger.log("Response: " + response.getContentText());
+      throw new Error("Failed to fetch data from Kraken API");
+    }
+
+    var json = JSON.parse(response.getContentText());
+
+    // Extract OHLC data
+    var data = json.result.USDTZUSD; // USDT/USD pair on Kraken
+
+    // Prepare headers
+    var headers = [["Timestamp", "Open", "High", "Low", "Close"]];
+    sheet.getRange(1, 1, 1, 5).setValues(headers);
+
+    // Format data - ensure precision is maintained
+    var formattedData = data.map(function(row) {
+      return [
+        new Date(row[0] * 1000), // Convert Unix timestamp to date
+        parseFloat(row[1]), // Open
+        parseFloat(row[2]), // High
+        parseFloat(row[3]), // Low
+        parseFloat(row[4])  // Close
+      ];
+    });
+
+    // Write data to sheet
+    if (formattedData.length > 0) {
+      sheet.getRange(2, 1, formattedData.length, 5).setValues(formattedData);
+      
+      // Format timestamp column
+      sheet.getRange(2, 1, formattedData.length, 1).setNumberFormat("yyyy-mm-dd hh:mm:ss");
+      
+      // Format price columns with more decimal places
+      // Use #,##0.0000 for 4 decimal places, or increase as needed
+      sheet.getRange(2, 2, formattedData.length, 4).setNumberFormat("$#,##0.000000");
+      
+      // Alternative: Use scientific notation if you need even more precision
+      // sheet.getRange(2, 2, formattedData.length, 4).setNumberFormat("$0.00000E+00");
+      
+      // Or use general number format to show all available digits
+      // sheet.getRange(2, 2, formattedData.length, 4).setNumberFormat("General");
+    }
+
+  } catch (error) {
+    Logger.log("Error: " + error.toString());
+    throw new Error("Failed to import data from Kraken API");
+  }
+}
+
+// Alternative function with debugging to check actual values
+function importKrakenDataWithDebug() {
+  var spreadsheet = SpreadsheetApp.getActiveSpreadsheet();
+  var sheetName = "USDT/USD";
+  var sheet = spreadsheet.getSheetByName(sheetName);
+  
+  if (!sheet) {
+    sheet = spreadsheet.insertSheet(sheetName);
+  }
+  
+  spreadsheet.setActiveSheet(sheet);
+  sheet.clear();
+  
+  var url = "https://api.kraken.com/0/public/OHLC?pair=USDTZUSD&interval=1440";
+  
+  try {
+    Utilities.sleep(2000);
+    var response = UrlFetchApp.fetch(url, { muteHttpExceptions: true });
+
+    if (response.getResponseCode() !== 200) {
+      Logger.log("Response Code: " + response.getResponseCode());
+      Logger.log("Response: " + response.getContentText());
+      throw new Error("Failed to fetch data from Kraken API");
+    }
+
+    var json = JSON.parse(response.getContentText());
+    var data = json.result.USDTZUSD;
+
+    // Debug: Log some raw values to see what we're getting
+    if (data.length > 0) {
+      Logger.log("Sample raw data:");
+      Logger.log("Open: " + data[0][1]);
+      Logger.log("High: " + data[0][2]); 
+      Logger.log("Low: " + data[0][3]);
+      Logger.log("Close: " + data[0][4]);
+      
+      Logger.log("After parseFloat:");
+      Logger.log("Open: " + parseFloat(data[0][1]));
+      Logger.log("High: " + parseFloat(data[0][2]));
+      Logger.log("Low: " + parseFloat(data[0][3]));
+      Logger.log("Close: " + parseFloat(data[0][4]));
+    }
+
+    var headers = [["Timestamp", "Open", "High", "Low", "Close"]];
+    sheet.getRange(1, 1, 1, 5).setValues(headers);
+
+    var formattedData = data.map(function(row) {
+      return [
+        new Date(row[0] * 1000),
+        parseFloat(row[1]),
+        parseFloat(row[2]),
+        parseFloat(row[3]),
+        parseFloat(row[4])
+      ];
+    });
+
+    if (formattedData.length > 0) {
+      sheet.getRange(2, 1, formattedData.length, 5).setValues(formattedData);
+      sheet.getRange(2, 1, formattedData.length, 1).setNumberFormat("yyyy-mm-dd hh:mm:ss");
+      
+      // Try different formatting options:
+      // Option 1: More decimal places
+      sheet.getRange(2, 2, formattedData.length, 4).setNumberFormat("$#,##0.000000");
+      
+      // Option 2: If you want to try without currency symbol
+      // sheet.getRange(2, 2, formattedData.length, 4).setNumberFormat("#,##0.000000");
+    }
+
+  } catch (error) {
+    Logger.log("Error: " + error.toString());
+    throw new Error("Failed to import data from Kraken API");
+  }
+}
