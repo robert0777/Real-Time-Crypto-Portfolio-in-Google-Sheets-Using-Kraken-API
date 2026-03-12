@@ -27,8 +27,11 @@ function onOpen() {
     .addItem('Import Dai (DAI)', 'importDaiData')
 
     .addItem('Import PayPal (PYUSD)', 'importPayPalData')
-    .addItem('Import True USD (TUSD)', 'importTrueUSDData')
+    .addItem('Import Mexican Peso USD (MXNB)', 'importMexicanPesoUSDData')
 
 
     .addToUi();
 }
+
+
+

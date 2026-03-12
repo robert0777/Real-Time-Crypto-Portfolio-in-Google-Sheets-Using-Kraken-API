@@ -1,0 +1,361 @@
+// For more details please read my article on Medium: https://chomchom216.medium.com/
+// Thank you. Dr. Robert Hernández Martínez
+// robert@actuariayfinanzas.net
+// Badges: https://www.credly.com/users/robert-hernandez.89bffe7b/badges#credly
+
+
+
+function updateKrakenData() {
+  try {
+    const ss = SpreadsheetApp.getActiveSpreadsheet();
+    
+    // Check if sheet exists, create if it doesn't
+    let sheet = ss.getSheetByName('Kraken Crypto Currencies');
+    
+    if (!sheet) {
+      // Create new sheet and setup headers
+      sheet = ss.insertSheet('Kraken Crypto Currencies');
+      setupHeaders(sheet);
+      Logger.log('Created new sheet: Kraken Crypto Currencies');
+    }
+    
+    // Now we can safely get the last row
+    const lastRow = sheet.getLastRow();
+    
+    // Clear existing data but keep headers
+    if (lastRow > 1) {
+      sheet.getRange(2, 1, lastRow - 1, 11).clearContent();
+    }
+       
+
+
+
+    // STEP 1: DYNAMICALLY FETCH ALL AVAILABLE ASSET PAIRS
+    Logger.log('Fetching all available asset pairs from Kraken...');
+    const assetPairs = fetchAllAssetPairs();
+    Logger.log(`Found ${Object.keys(assetPairs).length} total trading pairs`);
+    
+    // STEP 2: FILTER TO USD, USDT, USDC PAIRS ONLY
+    const relevantPairs = filterRelevantPairs(assetPairs);
+    Logger.log(`Filtered to ${relevantPairs.length} USD-related pairs`);
+    
+    // STEP 3: FETCH TICKER DATA FOR ALL FILTERED PAIRS
+    const tickerData = fetchTickerForPairs(relevantPairs);
+    Logger.log(`Retrieved ticker data for ${Object.keys(tickerData).length} pairs`);
+    
+    // STEP 4: FETCH ASSET NAMES FOR FULL NAME RESOLUTION
+    const assetNames = fetchKrakenAssets();
+    
+    // STEP 5: PROCESS AND BUILD THE DATASET
+    const rowData = [];
+    const timestamp = new Date().toISOString().slice(0, 19).replace('T', ' ');
+    
+    for (const pair of relevantPairs) {
+      const data = tickerData[pair];
+      if (!data) continue; // Skip if no ticker data
+      
+      // Get base and quote currencies
+      const pairInfo = assetPairs[pair];
+      const baseCurrency = pairInfo ? pairInfo.base : extractBaseCurrency(pair);
+      const quoteCurrency = pairInfo ? pairInfo.quote : extractQuoteCurrency(pair);
+      
+      // Get asset information
+      const assetInfo = getAssetInfo(baseCurrency, assetNames);
+      
+      // Calculate price change
+      const currentPrice = parseFloat(data.c[0]);
+      const openPrice = parseFloat(data.o || 0);
+      const priceChange24h = currentPrice - openPrice;
+      const priceChangePercent = openPrice > 0 ? (priceChange24h / openPrice) * 100 : 0;
+      
+      rowData.push([
+        pair,                                   // Pair
+        assetInfo.symbol || baseCurrency,       // Symbol 
+        assetInfo.fullName || baseCurrency,     // Full Name
+        baseCurrency,                           // Asset Name
+        currentPrice,                           // Current Price ($)
+        priceChange24h,                         // Price Change 24h ($)
+        priceChangePercent,                      // Price Change 24h (%)
+        parseFloat(data.v[1] || 0),              // Volume 24h
+        parseFloat(data.h[1] || 0),               // High 24h
+        parseFloat(data.l[1] || 0),               // Low 24h
+        timestamp                                // Last Updated
+      ]);
+    }
+    
+    // Sort by volume (descending)
+    rowData.sort((a, b) => b[7] - a[7]);
+    
+   
+
+// Write data to sheet
+    if (rowData.length > 0) {
+      const outputRange = sheet.getRange(2, 1, rowData.length, 11);
+      outputRange.setValues(rowData);
+      formatSheet(sheet, rowData.length);
+      
+      // Add summary info
+      sheet.getRange(rowData.length + 2, 1).setValue(`Last updated: ${timestamp} | Total pairs: ${rowData.length}`);
+      
+      // Non-intrusive toast notification
+      SpreadsheetApp.getActiveSpreadsheet().toast(
+        `✅ Updated ${rowData.length} cryptocurrency pairs`, 
+        'Kraken Crypto Update', 
+        5
+      );
+      
+    } else {
+      SpreadsheetApp.getActiveSpreadsheet().toast(
+        '⚠️ No data retrieved from Kraken', 
+        'Kraken Crypto Update', 
+        5
+      );
+    }
+
+
+  } catch (error) {
+    Logger.log('Error: ' + error.toString());
+    SpreadsheetApp.getActiveSpreadsheet().toast(
+      '❌ Error: ' + error.toString().substring(0, 100) + '...', 
+      'Kraken Crypto Error', 
+      10
+    );
+  }
+}
+
+
+
+
+
+
+
+
+/**
+ * Fetch ALL available asset pairs from Kraken
+ * This is the key function for dynamic pair discovery
+ */
+function fetchAllAssetPairs() {
+  const url = 'https://api.kraken.com/0/public/AssetPairs';
+  const response = UrlFetchApp.fetch(url, { muteHttpExceptions: true, timeout: 30000 });
+  const data = JSON.parse(response.getContentText());
+  
+  if (data.error && data.error.length > 0) {
+    throw new Error('AssetPairs API Error: ' + data.error.join(', '));
+  }
+  
+  return data.result;
+}
+
+/**
+ * Filter pairs to only include USD, USDT, USDC quote currencies
+ */
+function filterRelevantPairs(assetPairs) {
+  const relevantPairs = [];
+  const quoteCurrencies = ['ZUSD', 'USD', 'USDT', 'USDC']; // Kraken uses ZUSD for USD
+  
+  for (const [pairName, pairInfo] of Object.entries(assetPairs)) {
+    // Check if this is a USD-related pair
+    const quote = pairInfo.quote || '';
+    if (quoteCurrencies.includes(quote)) {
+      // Use the altname for consistency (e.g., "XBTUSD" instead of "XXBTZUSD")
+      const displayName = pairInfo.altname || pairName;
+      relevantPairs.push(displayName);
+    }
+  }
+  
+  return relevantPairs;
+}
+
+/**
+ * Fetch ticker data for multiple pairs in batches
+ * Kraken allows up to X pairs per request, so we batch them
+ */
+function fetchTickerForPairs(pairs) {
+  const allTickerData = {};
+  const batchSize = 100; // Kraken can handle many pairs in one request
+  
+  for (let i = 0; i < pairs.length; i += batchSize) {
+    const batch = pairs.slice(i, i + batchSize);
+    const pairString = batch.join(',');
+    
+    const url = `https://api.kraken.com/0/public/Ticker?pair=${pairString}`;
+    const response = UrlFetchApp.fetch(url, { muteHttpExceptions: true, timeout: 30000 });
+    const data = JSON.parse(response.getContentText());
+    
+    if (data.error && data.error.length > 0) {
+      Logger.log('Warning for batch: ' + data.error.join(', '));
+      continue;
+    }
+    
+    // Merge results
+    Object.assign(allTickerData, data.result);
+    
+    // Small delay to avoid rate limits
+    if (i + batchSize < pairs.length) {
+      Utilities.sleep(500);
+    }
+  }
+  
+  return allTickerData;
+}
+
+function fetchKrakenAssets() {
+  const url = 'https://api.kraken.com/0/public/Assets';
+  const response = UrlFetchApp.fetch(url, { muteHttpExceptions: true });
+  const data = JSON.parse(response.getContentText());
+  
+  if (data.error && data.error.length > 0) {
+    Logger.log('Warning - Assets API error: ' + data.error.join(', '));
+    return {};
+  }
+  
+  // Create mapping of asset codes to names
+  const assetMap = {};
+  for (const [code, info] of Object.entries(data.result)) {
+    assetMap[code] = {
+      name: info.name || code,
+      altname: info.altname || code
+    };
+  }
+  
+  return assetMap;
+}
+
+function extractBaseCurrency(pair) {
+  // Remove common quote currencies
+  const quoteCurrencies = ['USD', 'USDT', 'USDC', 'EUR', 'GBP', 'JPY', 'CAD', 'CHF', 'AUD'];
+  let base = pair;
+  
+  for (const quote of quoteCurrencies) {
+    if (base.endsWith(quote)) {
+      base = base.substring(0, base.length - quote.length);
+      break;
+    }
+  }
+  
+  return base;
+}
+
+function extractQuoteCurrency(pair) {
+  const quoteCurrencies = ['USD', 'USDT', 'USDC', 'EUR', 'GBP', 'JPY', 'CAD', 'CHF', 'AUD'];
+  
+  for (const quote of quoteCurrencies) {
+    if (pair.endsWith(quote)) {
+      return quote;
+    }
+  }
+  
+  return 'USD';
+}
+
+function getAssetInfo(assetCode, assetNames) {
+  // Common mappings (same as before - I'll keep this concise)
+  const commonNames = {
+    'XBT': { symbol: 'BTC', fullName: 'Bitcoin' },
+    'BTC': { symbol: 'BTC', fullName: 'Bitcoin' },
+    'ETH': { symbol: 'ETH', fullName: 'Ethereum' },
+    'SOL': { symbol: 'SOL', fullName: 'Solana' },
+    'XRP': { symbol: 'XRP', fullName: 'Ripple' },
+    'ADA': { symbol: 'ADA', fullName: 'Cardano' },
+    'DOGE': { symbol: 'DOGE', fullName: 'Dogecoin' },
+    'DOT': { symbol: 'DOT', fullName: 'Polkadot' },
+    'LINK': { symbol: 'LINK', fullName: 'Chainlink' },
+    'UNI': { symbol: 'UNI', fullName: 'Uniswap' },
+    'AAVE': { symbol: 'AAVE', fullName: 'Aave' },
+    'MATIC': { symbol: 'MATIC', fullName: 'Polygon' },
+    'AVAX': { symbol: 'AVAX', fullName: 'Avalanche' },
+    'LTC': { symbol: 'LTC', fullName: 'Litecoin' },
+    'BCH': { symbol: 'BCH', fullName: 'Bitcoin Cash' },
+    'XLM': { symbol: 'XLM', fullName: 'Stellar' }
+  };
+  
+  if (commonNames[assetCode]) {
+    return commonNames[assetCode];
+  }
+  
+  if (assetNames[assetCode]) {
+    const name = assetNames[assetCode].name || assetCode;
+    const altname = assetNames[assetCode].altname || assetCode;
+    
+    let fullName = name;
+    if (name.includes('.')) {
+      const parts = name.split('.');
+      fullName = parts.length > 1 ? parts[1] : name;
+    }
+    
+    return {
+      symbol: altname,
+      fullName: fullName
+    };
+  }
+  
+  return {
+    symbol: assetCode,
+    fullName: assetCode
+  };
+}
+
+function setupHeaders(sheet) {
+  const headers = [
+    'Pair', 'Symbol', 'Full Name', 'Asset Name', 'Current Price ($)',
+    'Price Change 24h ($)', 'Price Change 24h (%)', 'Volume 24h',
+    'High 24h', 'Low 24h', 'Last Updated'
+  ];
+  
+  sheet.getRange(1, 1, 1, headers.length).setValues([headers]);
+  sheet.getRange(1, 1, 1, headers.length).setFontWeight('bold');
+  sheet.setFrozenRows(1);
+}
+
+function formatSheet(sheet, numRows) {
+  if (numRows === 0) return;
+  
+  const currencyColumns = [5, 6, 9, 10]; // Current Price, Price Change, High, Low
+  currencyColumns.forEach(col => {
+    sheet.getRange(2, col, numRows, 1).setNumberFormat('$#,##0.00');
+  });
+  
+  sheet.getRange(2, 7, numRows, 1).setNumberFormat('#,##0.00"%"'); // Percentage
+  sheet.getRange(2, 8, numRows, 1).setNumberFormat('#,##0.00'); // Volume
+  sheet.getRange(2, 11, numRows, 1).setNumberFormat('yyyy-mm-dd hh:mm:ss'); // Date
+  
+  for (let i = 1; i <= 11; i++) {
+    sheet.autoResizeColumn(i);
+  }
+}
+
+// function onOpen() {
+//   const ui = SpreadsheetApp.getUi();
+//   ui.createMenu('Kraken Crypto')
+//     .addItem('Update Kraken Data', 'updateKrakenData')
+//     .addItem('Setup Headers', 'setupHeadersManual')
+//     .addToUi();
+// }
+
+function setupHeadersManual() {
+  const ss = SpreadsheetApp.getActiveSpreadsheet();
+  let sheet = ss.getSheetByName('Kraken Crypto Currencies');
+  
+  if (!sheet) {
+    sheet = ss.insertSheet('Kraken Crypto Currencies');
+  }
+  
+  setupHeaders(sheet);
+  SpreadsheetApp.getUi().alert('Headers have been set up!');
+}
+
+function createTimeTrigger() {
+  const triggers = ScriptApp.getProjectTriggers();
+  triggers.forEach(trigger => {
+    if (trigger.getHandlerFunction() === 'updateKrakenData') {
+      ScriptApp.deleteTrigger(trigger);
+    }
+  });
+  
+  ScriptApp.newTrigger('updateKrakenData')
+    .timeBased()
+    .everyHours(1)
+    .create();
+  
+  SpreadsheetApp.getUi().alert('Auto-update trigger created! Data will update every hour.');
+}

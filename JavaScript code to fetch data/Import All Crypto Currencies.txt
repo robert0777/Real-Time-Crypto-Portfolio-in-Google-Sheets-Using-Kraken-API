@@ -31,80 +31,41 @@ function importAllKrakenData() {
       pair: "ADAUSD",
       resultKey: "ADAUSD"
     },
-
-
-
-
-
-
-
     {
       name: "LTC/USD",
       pair: "LTCUSD",
       resultKey: "XLTCZUSD"
     },
-
-
-
-
-
     {
       name: "SHIB/USD",
       pair: "SHIBUSD",
       resultKey: "SHIBUSD"
     },
-
-
-
-
-
-
-
     {
       name: "USDT/USD",
       pair: "USDTZUSD",
       resultKey: "USDTZUSD"
     },
-
     {
       name: "BNB/USD",
       pair: "BNBUSD",
       resultKey: "BNBUSD"
     },
-
     {
       name: "DAI/USD",
       pair: "DAIUSD",
       resultKey: "DAIUSD"
     },
-
-
-
-
-
-
-
     {
       name: "PYUSD/USD",
       pair: "PYUSDUSD",
       resultKey: "PYUSDUSD"
     },
-
-
-
-
     {
-      name: "TUSD/USD",
-      pair: "TUSDUSD",
-      resultKey: "TUSDUSD"
+      name: "MXNB/USD",
+      pair: "MXNBUSD",
+      resultKey: "MXNBUSD"
     }
-
-
-
-
-
-
-
 
   ];
 
@@ -398,15 +359,15 @@ function importPayPalData() {
 
 
 
-function importTrueUSDData() {
+function importMexicanPesoUSDData() {
   var crypto = {
-    name: "TUSD/USD",
-    pair: "TUSDUSD",
-    resultKey: "TUSDUSD"
+    name: "MXNB/USD",
+    pair: "MXNBUSD",
+    resultKey: "MXNBUSD"
   };
   var spreadsheet = SpreadsheetApp.getActiveSpreadsheet();
   importCryptoData(spreadsheet, crypto);
-  SpreadsheetApp.getUi().alert('True USD data imported successfully!');
+  SpreadsheetApp.getUi().alert('Mexican Peso USD data imported successfully!');
 }
 
 
@@ -463,7 +424,7 @@ function createSummarySheet() {
   headerRange.setBackground("#34a853");
   headerRange.setFontColor("white");
   
-  var cryptos = ["BTC/USD", "ETH/USD", "XRP/USD", "DOGE/USD", "ADA/USD", "LTC/USD", "SHIB/USD", "USDT/USD", "BNB/USD", "DAI/USD", "PYUSD/USD", "TUSD/USD"];
+  var cryptos = ["BTC/USD", "ETH/USD", "XRP/USD", "DOGE/USD", "ADA/USD", "LTC/USD", "SHIB/USD", "USDT/USD", "BNB/USD", "DAI/USD", "PYUSD/USD", "MXNB/USD"];
   var summaryData = [];
   
   cryptos.forEach(function(cryptoName) {
